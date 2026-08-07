@@ -12,8 +12,10 @@ import {
   HelpCircle,
   FileCheck2,
   RefreshCcw,
-  UploadCloud
+  UploadCloud,
+  Download
 } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
 import { scanLabReport } from '../utils/aiScanner';
 import AnatomyViewer from '../components/AnatomyViewer';
 
@@ -197,6 +199,45 @@ export default function DiseasePrediction() {
       else if (riskScore > 35) status = "Moderate Risk";
       else status = "Low Risk / Healthy";
     }
+
+    setPredictions({
+      risk: riskScore,
+      status: status,
+      confidence: confidence,
+      timestamp: new Date().toLocaleString(),
+      recommendations: getRecommendations(type, riskScore)
+    });
+    setLoading(false);
+  };
+
+  const getRecommendations = (type, risk) => {
+    if (risk < 35) return ["Maintain current healthy lifestyle.", "Regular annual checkups recommended."];
+    if (type === 'kidney') return ["Reduce sodium intake", "Monitor blood pressure closely", "Consult a nephrologist for detailed testing"];
+    if (type === 'heart') return ["Begin mild aerobic exercises", "Adopt a Mediterranean diet", "Schedule an ECG and cardiology consult"];
+    if (type === 'diabetes') return ["Monitor fasting blood sugar daily", "Reduce refined carbohydrates", "Consult an endocrinologist"];
+    return ["Schedule an immediate clinical evaluation", "Follow prescribed diagnostic tests", "Maintain a symptom journal"];
+  };
+
+  const handleDownloadReport = () => {
+    const element = document.getElementById('pdf-report-template');
+    if (!element) return;
+    
+    // Temporarily show element for html2pdf
+    element.style.display = 'block';
+    
+    const opt = {
+      margin:       0.5,
+      filename:     `Haya_Healthcare_${activeTab}_Report.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save().then(() => {
+      // Hide again after generation
+      element.style.display = 'none';
+    });
+  };
 
     const result = {
       type,
@@ -663,14 +704,23 @@ export default function DiseasePrediction() {
                 </ul>
               </div>
 
-              {/* Reset button */}
-              <button 
-                onClick={() => setPredictions(null)}
-                className="w-full flex items-center justify-center gap-1 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50"
-              >
-                <RefreshCcw className="h-3.5 w-3.5" />
-                Clear Assessment
-              </button>
+              {/* Actions buttons */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                <button 
+                  onClick={handleDownloadReport}
+                  className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-medical-primary text-white hover:bg-medical-secondary rounded-lg text-xs font-bold transition-all shadow-md"
+                >
+                  <Download className="h-4 w-4" />
+                  Download Report
+                </button>
+                <button 
+                  onClick={() => setPredictions(null)}
+                  className="w-full flex items-center justify-center gap-1 py-2.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-all"
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                  Clear
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center text-center my-auto p-4 space-y-4">
@@ -683,6 +733,79 @@ export default function DiseasePrediction() {
           )}
         </div>
       </div>
+
+      {/* Hidden PDF Template */}
+      {predictions && (
+        <div style={{ display: 'none' }}>
+          <div id="pdf-report-template" className="p-10 bg-white text-slate-800 font-sans w-[800px] h-[1050px] relative">
+            
+            {/* Professional Header */}
+            <div className="flex justify-between items-center border-b-4 border-medical-primary pb-6 mb-8">
+              <div className="flex items-center gap-5">
+                <img src="/logo.png" alt="Haya Healthcare Logo" className="h-20 w-20 object-contain" />
+                <div>
+                  <h1 className="text-4xl font-extrabold text-medical-primary tracking-tight">Haya Healthcare</h1>
+                  <p className="text-base font-bold text-slate-500 tracking-widest uppercase">AI Clinical Diagnostics</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <h2 className="text-xl font-black text-slate-800">Dr. Hariprasath L</h2>
+                <p className="text-sm font-semibold text-emerald-600">Founder & Chief AI Officer</p>
+                <p className="text-xs text-slate-400 mt-1">Official Medical Report</p>
+              </div>
+            </div>
+            
+            {/* Report Title */}
+            <h2 className="text-2xl font-extrabold mb-6 text-slate-800 uppercase tracking-wide border-l-4 border-emerald-500 pl-4">
+              {activeTab} Risk Assessment Report
+            </h2>
+            
+            {/* Risk Profile Card */}
+            <div className="bg-slate-50 border border-slate-200 p-8 rounded-2xl mb-8 flex justify-between items-center shadow-sm">
+              <div>
+                <p className="text-6xl font-black mb-1" style={{ color: predictions.risk > 70 ? '#ef4444' : predictions.risk > 35 ? '#f59e0b' : '#10b981' }}>
+                  {predictions.risk}%
+                </p>
+                <p className="text-sm text-slate-500 uppercase font-black tracking-widest">Calculated Risk Score</p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-black text-slate-800 uppercase mb-2">{predictions.status}</p>
+                <p className="text-base font-semibold text-slate-600">{predictions.confidence}% AI Confidence</p>
+                <p className="text-sm text-slate-500 mt-1">Evaluated on: {predictions.timestamp}</p>
+              </div>
+            </div>
+            
+            {/* Clinical Recommendations */}
+            <div className="mb-10">
+              <h3 className="text-xl font-bold border-b-2 border-slate-100 pb-3 mb-4 text-slate-800 flex items-center gap-2">
+                <FileCheck2 className="h-5 w-5 text-medical-primary" />
+                Clinical Recommendations
+              </h3>
+              <ul className="list-none space-y-4 text-slate-700 font-medium">
+                {predictions.recommendations.map((rec, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="h-2 w-2 bg-emerald-500 rounded-full mt-2 shrink-0"></span>
+                    <span className="text-lg">{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Disclaimer & Footer */}
+            <div className="absolute bottom-10 left-10 right-10">
+              <div className="border-t-2 border-slate-100 pt-6 text-center">
+                <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Notice of AI Generation</p>
+                <p className="text-xs text-slate-500 leading-relaxed max-w-2xl mx-auto">
+                  This report was autonomously generated by the Haya Healthcare AI Engine developed by Dr. Hariprasath L. 
+                  This is a predictive analysis based on provided clinical data and does not constitute a final medical diagnosis. 
+                  Always consult a licensed medical professional for treatment.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
