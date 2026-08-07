@@ -200,45 +200,6 @@ export default function DiseasePrediction() {
       else status = "Low Risk / Healthy";
     }
 
-    setPredictions({
-      risk: riskScore,
-      status: status,
-      confidence: confidence,
-      timestamp: new Date().toLocaleString(),
-      recommendations: getRecommendations(type, riskScore)
-    });
-    setLoading(false);
-  };
-
-  const getRecommendations = (type, risk) => {
-    if (risk < 35) return ["Maintain current healthy lifestyle.", "Regular annual checkups recommended."];
-    if (type === 'kidney') return ["Reduce sodium intake", "Monitor blood pressure closely", "Consult a nephrologist for detailed testing"];
-    if (type === 'heart') return ["Begin mild aerobic exercises", "Adopt a Mediterranean diet", "Schedule an ECG and cardiology consult"];
-    if (type === 'diabetes') return ["Monitor fasting blood sugar daily", "Reduce refined carbohydrates", "Consult an endocrinologist"];
-    return ["Schedule an immediate clinical evaluation", "Follow prescribed diagnostic tests", "Maintain a symptom journal"];
-  };
-
-  const handleDownloadReport = () => {
-    const element = document.getElementById('pdf-report-template');
-    if (!element) return;
-    
-    // Temporarily show element for html2pdf
-    element.style.display = 'block';
-    
-    const opt = {
-      margin:       0.5,
-      filename:     `Haya_Healthcare_${activeTab}_Report.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    
-    html2pdf().set(opt).from(element).save().then(() => {
-      // Hide again after generation
-      element.style.display = 'none';
-    });
-  };
-
     const result = {
       type,
       risk: riskScore,
@@ -268,6 +229,26 @@ export default function DiseasePrediction() {
     } else {
       return ["Schedule follow-up diagnostics.", "Seek immediate consultation from a medical practitioner.", "Monitor vital statistics hourly."];
     }
+  };
+
+
+  const handleDownloadReport = () => {
+    const element = document.getElementById('pdf-report-template');
+    if (!element) return;
+    
+    element.style.display = 'block';
+    
+    const opt = {
+      margin:       0.5,
+      filename:     `Haya_Healthcare_${activeTab}_Report.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save().then(() => {
+      element.style.display = 'none';
+    });
   };
 
   return (
