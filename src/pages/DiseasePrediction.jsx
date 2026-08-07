@@ -15,9 +15,10 @@ import {
   UploadCloud,
   Download
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
 import { scanLabReport } from '../utils/aiScanner';
 import AnatomyViewer from '../components/AnatomyViewer';
+import DoctorSignature from '../components/DoctorSignature';
+import { downloadPDFFromElement } from '../utils/exportUtils';
 
 export default function DiseasePrediction() {
   const [activeTab, setActiveTab] = useState('kidney');
@@ -231,24 +232,8 @@ export default function DiseasePrediction() {
     }
   };
 
-
   const handleDownloadReport = () => {
-    const element = document.getElementById('pdf-report-template');
-    if (!element) return;
-    
-    element.style.display = 'block';
-    
-    const opt = {
-      margin:       0.5,
-      filename:     `Haya_Healthcare_${activeTab}_Report.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true },
-      jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-    };
-    
-    html2pdf().set(opt).from(element).save().then(() => {
-      element.style.display = 'none';
-    });
+    downloadPDFFromElement('pdf-report-template', `Haya_Healthcare_${activeTab}_Report.pdf`);
   };
 
   return (
@@ -715,74 +700,66 @@ export default function DiseasePrediction() {
         </div>
       </div>
 
-      {/* Hidden PDF Template */}
+      {/* Offscreen Single-Page PDF Template */}
       {predictions && (
-        <div style={{ display: 'none' }}>
-          <div id="pdf-report-template" className="p-10 bg-white text-slate-800 font-sans w-[800px] h-[1050px] relative">
+        <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -9999 }}>
+          <div id="pdf-report-template" style={{ width: '780px', height: '1000px', padding: '30px', boxSizing: 'border-box', overflow: 'hidden', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: 'sans-serif' }}>
             
-            {/* Professional Header */}
-            <div className="flex justify-between items-center border-b-4 border-medical-primary pb-6 mb-8">
-              <div className="flex items-center gap-5">
-                <img src="/logo.png" alt="Haya Healthcare Logo" className="h-20 w-20 object-contain" />
+            {/* Header */}
+            <div style={{ display: 'flex', justifyBetween: 'space-between', alignItems: 'center', borderBottom: '3px solid #0ea5e9', paddingBottom: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                <img src="/logo.png" alt="Haya Healthcare Logo" style={{ height: '56px', width: '56px', objectFit: 'contain' }} />
                 <div>
-                  <h1 className="text-4xl font-extrabold text-medical-primary tracking-tight">Haya Healthcare</h1>
-                  <p className="text-base font-bold text-slate-500 tracking-widest uppercase">AI Clinical Diagnostics</p>
+                  <h1 style={{ fontSize: '26px', fontWeight: '900', color: '#0ea5e9', margin: 0, letterSpacing: '0.5px' }}>HAYA HEALTHCARE</h1>
+                  <p style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', margin: 0, textTransform: 'uppercase', letterSpacing: '1px' }}>AI Clinical Diagnostics Platform</p>
                 </div>
               </div>
-              <div className="text-right">
-                <h2 className="text-xl font-black text-slate-800">Dr. Hariprasath L</h2>
-                <p className="text-sm font-semibold text-emerald-600">Founder & Chief AI Officer</p>
-                <p className="text-xs text-slate-400 mt-1">Official Medical Report</p>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: '10px', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold', textTransform: 'uppercase' }}>Official Diagnostic Report</span>
+                <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#94a3b8' }}>Evaluated: {predictions.timestamp}</p>
               </div>
             </div>
             
             {/* Report Title */}
-            <h2 className="text-2xl font-extrabold mb-6 text-slate-800 uppercase tracking-wide border-l-4 border-emerald-500 pl-4">
-              {activeTab} Risk Assessment Report
+            <h2 style={{ fontSize: '18px', fontWeight: '800', margin: '0 0 16px 0', textTransform: 'uppercase', letterSpacing: '1px', color: '#1e293b', borderLeft: '4px solid #10b981', paddingLeft: '12px' }}>
+              {activeTab} Risk Assessment & Diagnostic Report
             </h2>
             
-            {/* Risk Profile Card */}
-            <div className="bg-slate-50 border border-slate-200 p-8 rounded-2xl mb-8 flex justify-between items-center shadow-sm">
+            {/* Risk Profile Banner */}
+            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', padding: '20px', borderRadius: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <p className="text-6xl font-black mb-1" style={{ color: predictions.risk > 70 ? '#ef4444' : predictions.risk > 35 ? '#f59e0b' : '#10b981' }}>
+                <p style={{ fontSize: '48px', fontWeight: '900', margin: 0, lineHeight: 1, color: predictions.risk > 70 ? '#ef4444' : predictions.risk > 35 ? '#f59e0b' : '#10b981' }}>
                   {predictions.risk}%
                 </p>
-                <p className="text-sm text-slate-500 uppercase font-black tracking-widest">Calculated Risk Score</p>
+                <p style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', fontWeight: '800', margin: '6px 0 0 0', letterSpacing: '1px' }}>Calculated Risk Score</p>
               </div>
-              <div className="text-right">
-                <p className="text-3xl font-black text-slate-800 uppercase mb-2">{predictions.status}</p>
-                <p className="text-base font-semibold text-slate-600">{predictions.confidence}% AI Confidence</p>
-                <p className="text-sm text-slate-500 mt-1">Evaluated on: {predictions.timestamp}</p>
+              <div style={{ textAlign: 'right' }}>
+                <p style={{ fontSize: '24px', fontWeight: '900', color: '#1e293b', textTransform: 'uppercase', margin: 0 }}>{predictions.status}</p>
+                <p style={{ fontSize: '13px', fontWeight: '700', color: '#059669', margin: '4px 0 0 0' }}>{predictions.confidence}% Neural Model Confidence</p>
               </div>
             </div>
             
             {/* Clinical Recommendations */}
-            <div className="mb-10">
-              <h3 className="text-xl font-bold border-b-2 border-slate-100 pb-3 mb-4 text-slate-800 flex items-center gap-2">
-                <FileCheck2 className="h-5 w-5 text-medical-primary" />
-                Clinical Recommendations
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '13px', fontWeight: '800', color: '#334155', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px', margin: '0 0 12px 0', textTransform: 'uppercase' }}>
+                Clinical Decision Support & Advice
               </h3>
-              <ul className="list-none space-y-4 text-slate-700 font-medium">
+              <ul style={{ margin: 0, paddingLeft: '20px', color: '#334155', fontSize: '12px', lineHeight: '1.6' }}>
                 {predictions.recommendations.map((rec, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <span className="h-2 w-2 bg-emerald-500 rounded-full mt-2 shrink-0"></span>
-                    <span className="text-lg">{rec}</span>
-                  </li>
+                  <li key={i} style={{ marginBottom: '6px' }}>{rec}</li>
                 ))}
               </ul>
             </div>
 
-            {/* Disclaimer & Footer */}
-            <div className="absolute bottom-10 left-10 right-10">
-              <div className="border-t-2 border-slate-100 pt-6 text-center">
-                <p className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">Notice of AI Generation</p>
-                <p className="text-xs text-slate-500 leading-relaxed max-w-2xl mx-auto">
-                  This report was autonomously generated by the Haya Healthcare AI Engine developed by Dr. Hariprasath L. 
-                  This is a predictive analysis based on provided clinical data and does not constitute a final medical diagnosis. 
-                  Always consult a licensed medical professional for treatment.
-                </p>
-              </div>
+            {/* Diagnostic Notice */}
+            <div style={{ backgroundColor: '#f0f9ff', borderLeft: '4px solid #0ea5e9', padding: '12px 16px', borderRadius: '6px', marginBottom: '24px' }}>
+              <p style={{ margin: 0, fontSize: '11px', color: '#0369a1', lineHeight: '1.4' }}>
+                <strong>Clinical Notice:</strong> This single-page diagnostic report is autonomously computed by Haya Healthcare AI. It provides rapid screening decision support and should be reviewed alongside physician evaluation.
+              </p>
             </div>
+
+            {/* Signature Block */}
+            <DoctorSignature doctorName="Dr. Hariprasath L" title="Founder & Chief AI Officer" />
 
           </div>
         </div>

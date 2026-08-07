@@ -37,6 +37,7 @@ export default function Sidebar() {
     { name: t('reports') || 'Medical Reports', path: '/reports', icon: FileText },
     { name: t('datasetUpload'), path: '/datasets', icon: Upload },
     { name: t('downloads'), path: '/downloads', icon: Download },
+    { name: 'App SRS Report', path: '/docs', icon: FileText },
     { name: t('patientManagement') || 'Patients', path: '/patients', icon: Users }
   ];
 

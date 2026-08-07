@@ -73,6 +73,7 @@ export default function Navbar() {
     {
       title: 'Information & Support',
       items: [
+        { name: 'App SRS Documentation', path: '/docs', icon: FileText },
         { name: t('founder') || 'Founder & Platform Profile', path: '/founder', icon: User },
         { name: t('contactUs') || 'Contact Clinical Support', path: '/contact', icon: Globe }
       ]

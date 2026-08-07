@@ -10,7 +10,8 @@ import {
   Calendar,
   Printer
 } from 'lucide-react';
-import html2pdf from 'html2pdf.js';
+import { downloadCSV, downloadExcel, downloadPDFFromElement } from '../utils/exportUtils';
+import DoctorSignature from '../components/DoctorSignature';
 
 export default function Reports() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -24,26 +25,28 @@ export default function Reports() {
     { id: "REP-9924", patient: "Anna Kovalenko", type: "Analytics Report", disease: "Hepatic Parameters Profile", date: "2026-06-08", risk: "Low (8%)", status: "Completed", accuracy: "97.2%" }
   ];
 
-  const handleDownload = (format, reportId) => {
-    if (format === 'pdf' && selectedReport) {
-      const element = document.getElementById('pdf-report-template');
-      
-      const opt = {
-        margin:       0.5,
-        filename:     `Haya_Healthcare_Report_${reportId}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2 },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' }
-      };
+  const handleDownload = (format, reportTarget) => {
+    const reportObj = typeof reportTarget === 'object' ? reportTarget : (mockReports.find(r => r.id === reportTarget) || selectedReport);
+    if (!reportObj) return;
 
-      // Temporarily unhide the template for capture
-      element.style.display = 'block';
-      html2pdf().set(opt).from(element).save().then(() => {
-        // Hide it again
-        element.style.display = 'none';
-      });
-    } else {
-      alert(`Downloading Report ${reportId} as ${format.toUpperCase()}...`);
+    setSelectedReport(reportObj);
+
+    if (format === 'csv') {
+      const data = [
+        ['Report ID', 'Patient Name', 'Report Type', 'Disease / Focus', 'Evaluation Date', 'Risk Level', 'Accuracy', 'Status'],
+        [reportObj.id, reportObj.patient, reportObj.type, reportObj.disease, reportObj.date, reportObj.risk, reportObj.accuracy, reportObj.status]
+      ];
+      downloadCSV(`Haya_Healthcare_Report_${reportObj.id}.csv`, data);
+    } else if (format === 'xlsx' || format === 'excel') {
+      const data = [
+        ['Report ID', 'Patient Name', 'Report Type', 'Disease / Focus', 'Evaluation Date', 'Risk Level', 'Accuracy', 'Status'],
+        [reportObj.id, reportObj.patient, reportObj.type, reportObj.disease, reportObj.date, reportObj.risk, reportObj.accuracy, reportObj.status]
+      ];
+      downloadExcel(`Haya_Healthcare_Report_${reportObj.id}.xlsx`, data);
+    } else if (format === 'pdf') {
+      setTimeout(() => {
+        downloadPDFFromElement('pdf-report-template', `Haya_Healthcare_Report_${reportObj.id}.pdf`);
+      }, 100);
     }
   };
 
@@ -125,7 +128,7 @@ export default function Reports() {
                         <Eye className="h-4 w-4" />
                       </button>
                       <button 
-                        onClick={() => handleDownload('pdf', rep.id)}
+                        onClick={() => handleDownload('pdf', rep)}
                         className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-medical-primary cursor-pointer"
                         title="Download PDF"
                       >
@@ -215,55 +218,47 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Hidden PDF Template */}
+      {/* Offscreen Single-Page PDF Template */}
       {selectedReport && (
-        <div id="pdf-report-template" style={{ display: 'none', padding: '40px', backgroundColor: '#fff', color: '#000', fontFamily: 'sans-serif' }}>
-          <div style={{ display: 'flex', alignItems: 'center', borderBottom: '2px solid #0ea5e9', paddingBottom: '20px', marginBottom: '30px' }}>
-            <img src="/logo.png" alt="Haya Health Care" style={{ height: '60px', marginRight: '20px' }} />
+        <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -9999 }}>
+          <div id="pdf-report-template" style={{ width: '780px', height: '1000px', padding: '30px', boxSizing: 'border-box', overflow: 'hidden', backgroundColor: '#ffffff', color: '#0f172a', fontFamily: 'sans-serif' }}>
+          <div style={{ display: 'flex', alignItems: 'center', borderBottom: '3px solid #0ea5e9', paddingBottom: '16px', marginBottom: '20px' }}>
+            <img src="/logo.png" alt="Haya Health Care" style={{ height: '56px', width: '56px', objectFit: 'contain', marginRight: '16px' }} />
             <div>
-              <h1 style={{ margin: 0, color: '#0ea5e9', fontSize: '28px', fontWeight: '900', letterSpacing: '1px' }}>HAYA HEALTH CARE</h1>
-              <p style={{ margin: 0, fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>AI-Powered Clinical Diagnostics Platform</p>
-              <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8' }}>Developed by Dr. Hari Prasath L (Founder & AI Engineer)</p>
+              <h1 style={{ margin: 0, color: '#0ea5e9', fontSize: '26px', fontWeight: '900', letterSpacing: '0.5px' }}>HAYA HEALTH CARE</h1>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase' }}>AI Clinical Diagnostic Engine</p>
             </div>
           </div>
           
-          <h2 style={{ fontSize: '20px', marginBottom: '20px', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '2px' }}>
+          <h2 style={{ fontSize: '18px', marginBottom: '16px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', color: '#1e293b', borderLeft: '4px solid #0ea5e9', paddingLeft: '12px' }}>
             Official {selectedReport.type}
           </h2>
 
-          <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-            <h3 style={{ fontSize: '14px', margin: '0 0 10px 0', color: '#475569' }}>Patient Information</h3>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Name:</strong> {selectedReport.patient}</p>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Report ID:</strong> {selectedReport.id}</p>
-            <p style={{ margin: '5px 0', fontSize: '14px' }}><strong>Date of Assessment:</strong> {selectedReport.date}</p>
+          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+            <h3 style={{ fontSize: '13px', margin: '0 0 8px 0', color: '#475569', fontWeight: '800', textTransform: 'uppercase' }}>Patient Information</h3>
+            <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Patient Name:</strong> {selectedReport.patient}</p>
+            <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Report ID:</strong> {selectedReport.id}</p>
+            <p style={{ margin: '4px 0', fontSize: '13px' }}><strong>Assessment Date:</strong> {selectedReport.date}</p>
           </div>
 
-          <div style={{ marginBottom: '40px', padding: '20px', borderLeft: '4px solid #0ea5e9', backgroundColor: '#f0f9ff' }}>
-            <h3 style={{ fontSize: '14px', margin: '0 0 10px 0', color: '#0284c7' }}>Clinical Assessment Details</h3>
-            <p style={{ margin: '8px 0', fontSize: '16px' }}><strong>Focus Area:</strong> {selectedReport.disease}</p>
-            <p style={{ margin: '8px 0', fontSize: '16px' }}>
+          <div style={{ marginBottom: '20px', padding: '16px', borderLeft: '4px solid #0ea5e9', backgroundColor: '#f0f9ff', borderRadius: '8px' }}>
+            <h3 style={{ fontSize: '13px', margin: '0 0 8px 0', color: '#0284c7', fontWeight: '800', textTransform: 'uppercase' }}>Clinical Assessment Details</h3>
+            <p style={{ margin: '6px 0', fontSize: '14px' }}><strong>Clinical Focus Area:</strong> {selectedReport.disease}</p>
+            <p style={{ margin: '6px 0', fontSize: '14px' }}>
               <strong>Calculated Risk Level:</strong> <span style={{ color: selectedReport.risk.includes('High') ? '#e11d48' : '#059669', fontWeight: 'bold' }}>{selectedReport.risk}</span>
             </p>
-            <p style={{ margin: '8px 0', fontSize: '14px', color: '#475569' }}><strong>Neural Model Accuracy:</strong> {selectedReport.accuracy}</p>
+            <p style={{ margin: '6px 0', fontSize: '13px', color: '#475569' }}><strong>Neural Model Accuracy:</strong> {selectedReport.accuracy}</p>
           </div>
 
-          <div style={{ marginTop: '50px', borderTop: '1px solid #cbd5e1', paddingTop: '20px' }}>
-            <p style={{ margin: '0 0 10px 0', fontSize: '12px', color: '#64748b' }}>
-              <strong>Disclaimer:</strong> This report is generated by the Haya Health Care AI Diagnostic Engine. It is intended to assist medical professionals and should not replace formal clinical diagnosis.
+          <div style={{ marginTop: '24px' }}>
+            <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#64748b', lineHeight: '1.4' }}>
+              <strong>Clinical Disclaimer:</strong> This single-page official report is autonomously processed by Haya Health Care AI. It provides diagnostic decision support and should be used alongside clinical practitioner evaluation.
             </p>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', marginTop: '40px' }}>
-              <div>
-                <p style={{ margin: 0, fontSize: '12px', color: '#000' }}>_______________________</p>
-                <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#64748b' }}>Authorized Signature</p>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, fontSize: '12px', color: '#64748b', fontWeight: 'bold' }}>Dr. Hari Prasath L</p>
-                <p style={{ margin: 0, fontSize: '10px', color: '#94a3b8' }}>Chief Medical AI Officer</p>
-              </div>
-            </div>
+            <DoctorSignature doctorName="Dr. Hariprasath L" title="Founder & Chief AI Officer" />
           </div>
         </div>
-      )}
-    </div>
-  );
+      </div>
+    )}
+  </div>
+);
 }

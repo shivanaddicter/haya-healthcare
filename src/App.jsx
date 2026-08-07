@@ -28,6 +28,7 @@ import Telemedicine from './pages/Telemedicine';
 import BlockchainRecords from './pages/BlockchainRecords';
 import HospitalLocator from './pages/HospitalLocator';
 import MedicalImageAI from './pages/MedicalImageAI';
+import DocumentationReport from './pages/DocumentationReport';
 
 // Open Route Wrap (Login is optional)
 function ProtectedRoute({ children }) {
@@ -168,6 +169,26 @@ export default function App() {
                     <ProtectedRoute>
                       <LayoutWrapper hasSidebar={true}>
                         <DownloadCenter />
+                      </LayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/docs" 
+                  element={
+                    <ProtectedRoute>
+                      <LayoutWrapper hasSidebar={true}>
+                        <DocumentationReport />
+                      </LayoutWrapper>
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/documentation" 
+                  element={
+                    <ProtectedRoute>
+                      <LayoutWrapper hasSidebar={true}>
+                        <DocumentationReport />
                       </LayoutWrapper>
                     </ProtectedRoute>
                   } 
