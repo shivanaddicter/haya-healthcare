@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSystem } from '../context/SystemContext';
 import { 
   Heart, 
   Activity, 
@@ -13,7 +14,8 @@ import {
   FileCheck2,
   RefreshCcw,
   UploadCloud,
-  Download
+  Download,
+  UserCheck
 } from 'lucide-react';
 import { scanLabReport } from '../utils/aiScanner';
 import AnatomyViewer from '../components/AnatomyViewer';
@@ -21,6 +23,8 @@ import DoctorSignature from '../components/DoctorSignature';
 import { downloadPDFFromElement } from '../utils/exportUtils';
 
 export default function DiseasePrediction() {
+  const { patients, updatePatient } = useSystem();
+  const [selectedPatientId, setSelectedPatientId] = useState(patients[0]?.id || '');
   const [activeTab, setActiveTab] = useState('kidney');
   const [predictions, setPredictions] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -213,6 +217,22 @@ export default function DiseasePrediction() {
     setPredictions(result);
     setLoading(false);
 
+    // Sync prediction into SystemContext patient history
+    if (selectedPatientId) {
+      const targetPatient = patients.find(p => p.id === selectedPatientId);
+      if (targetPatient) {
+        const diseaseLabel = activeTab.charAt(0).toUpperCase() + activeTab.slice(1) + " Assessment";
+        const newPred = {
+          disease: diseaseLabel,
+          date: new Date().toISOString().split('T')[0],
+          risk: `${riskScore}%`,
+          status: status
+        };
+        const updatedList = [newPred, ...(targetPatient.predictions || [])];
+        updatePatient(targetPatient.id, { predictions: updatedList });
+      }
+    }
+
     // Voice output of result
     const vocalResult = `Analysis complete. The model predicts ${status} with a risk score of ${riskScore} percent and a confidence rate of ${confidence} percent.`;
     speakText(vocalResult);
@@ -244,11 +264,28 @@ export default function DiseasePrediction() {
           <h1 className="font-display font-extrabold text-3xl">AI Disease Prediction Module</h1>
           <p className="text-sm text-slate-500">Provide clinical parameters below to invoke neural models</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Patient Selector */}
+          {patients.length > 0 && (
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 rounded-xl shadow-sm">
+              <UserCheck className="h-4 w-4 text-medical-primary" />
+              <span className="text-xs font-bold text-slate-500">Patient:</span>
+              <select 
+                value={selectedPatientId} 
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+                className="bg-transparent text-xs font-extrabold text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
+              >
+                {patients.map(p => (
+                  <option key={p.id} value={p.id} className="dark:bg-slate-800">{p.name} ({p.id})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Voice Switcher */}
           <button 
             onClick={() => setVoiceEnabled(!voiceEnabled)}
-            className={`p-2 rounded-lg border flex items-center gap-1.5 text-xs font-semibold ${voiceEnabled ? 'bg-medical-light border-medical-primary text-medical-secondary dark:bg-slate-800' : 'bg-slate-100 border-slate-300 dark:bg-slate-800'}`}
+            className={`p-2 rounded-xl border flex items-center gap-1.5 text-xs font-semibold ${voiceEnabled ? 'bg-medical-light border-medical-primary text-medical-secondary dark:bg-slate-800' : 'bg-slate-100 border-slate-300 dark:bg-slate-800'}`}
           >
             {voiceEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
             Voice Output: {voiceEnabled ? 'ON' : 'OFF'}
