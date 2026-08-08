@@ -19,7 +19,8 @@ import {
   Languages,
   Activity,
   HeartPulse,
-  Heart
+  Camera,
+  Maximize2
 } from 'lucide-react';
 
 export default function Telehealth() {
@@ -27,6 +28,15 @@ export default function Telehealth() {
 
   // Consultation Mode State: 'ai_doctor' or 'appointments'
   const [activeTab, setActiveTab] = useState('ai_doctor');
+  
+  // AI Video Call State
+  const [inAiVideoCall, setInAiVideoCall] = useState(false);
+  const [patientCameraActive, setPatientCameraActive] = useState(true);
+  const [patientMicActive, setPatientMicActive] = useState(true);
+  const [liveSubtitle, setLiveSubtitle] = useState("வணக்கம்! நான் Dr. Haya, உங்களின் AI பெண் மருத்துவர். உங்களுக்கு என்ன உதவி வேண்டும்? (Hello! I am Dr. Haya, your AI Female Doctor.)");
+
+  const patientVideoRef = useRef(null);
+  const patientMediaStream = useRef(null);
 
   // AI Female Doctor Chat & Speech State
   const [messages, setMessages] = useState([
@@ -60,8 +70,45 @@ export default function Telehealth() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
+  // Handle Patient Webcam Initialization
+  const startPatientWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      patientMediaStream.current = stream;
+      if (patientVideoRef.current) {
+        patientVideoRef.current.srcObject = stream;
+      }
+      setPatientCameraActive(true);
+      setPatientMicActive(true);
+    } catch (err) {
+      console.warn("Webcam access denied or unavailable:", err);
+      setPatientCameraActive(false);
+    }
+  };
+
+  const stopPatientWebcam = () => {
+    if (patientMediaStream.current) {
+      patientMediaStream.current.getTracks().forEach(track => track.stop());
+      patientMediaStream.current = null;
+    }
+  };
+
+  const handleStartAiVideoCall = async () => {
+    setInAiVideoCall(true);
+    await startPatientWebcam();
+    speakDoctorResponse("வணக்கம்! நேரலை AI வீடியோ மருத்துவ ஆலோசனையில் உங்களை வரவேற்பதில் மகிழ்ச்சி. உங்களுக்கு என்ன அசௌகரியம் இருக்கு? (Welcome to live AI Video Medical Consultation.)");
+  };
+
+  const handleEndAiVideoCall = () => {
+    stopPatientWebcam();
+    window.speechSynthesis?.cancel();
+    setInAiVideoCall(false);
+    setIsSpeaking(false);
+  };
+
   // Speech Output Function for AI Female Doctor in Tamil / English
   const speakDoctorResponse = (text) => {
+    setLiveSubtitle(text);
     if (!voiceOutputEnabled || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
 
@@ -70,7 +117,6 @@ export default function Telehealth() {
     const utterance = new SpeechSynthesisUtterance(cleanText);
 
     const voices = window.speechSynthesis.getVoices();
-    // Try to find a Tamil or Female voice
     const tamilVoice = voices.find(v => v.lang.includes('ta') || v.name.includes('Tamil') || v.name.includes('Lekha'));
     const femaleVoice = voices.find(v => v.name.includes('Female') || v.name.includes('Samantha') || v.name.includes('Zira') || v.name.includes('Google US English'));
 
@@ -214,12 +260,22 @@ Patient Query: ${patientQuery}`;
     recognition.lang = languageMode;
 
     recognition.onstart = () => setIsListening(true);
-    recognition.onresult = (event) => {
+    recognition.onresult = async (event) => {
       const transcript = Array.from(event.results)
         .map(result => result[0])
         .map(result => result.transcript)
         .join('');
       setInputText(transcript);
+      if (event.results[0].isFinal && inAiVideoCall) {
+        // Auto submit in video call mode
+        const userText = transcript;
+        setInputText('');
+        setIsListening(false);
+        setIsTyping(true);
+        const reply = await fetchAIDoctorResponse(userText);
+        setIsTyping(false);
+        speakDoctorResponse(reply);
+      }
     };
     recognition.onerror = () => setIsListening(false);
     recognition.onend = () => setIsListening(false);
@@ -252,13 +308,13 @@ Patient Query: ${patientQuery}`;
               Virtual AI Clinic
             </span>
             <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-              Dr. Haya (AI Female Doctor) • தமிழ் & English
+              Dr. Haya (AI Female Doctor Video Avatar) • தமிழ் & English
             </span>
           </div>
           <h1 className="font-display font-extrabold text-3xl mt-1.5 flex items-center gap-2">
-            Telehealth & AI Virtual Clinic
+            Telehealth & AI Virtual Video Clinic
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Consult with Dr. Haya (AI Female Doctor) in Tamil or schedule human specialist appointments</p>
+          <p className="text-sm text-slate-500 mt-1">Consult live on video with Dr. Haya (AI Female Doctor Avatar) in Tamil or schedule human specialist appointments</p>
         </div>
 
         {/* Tab Switcher */}
@@ -268,7 +324,7 @@ Patient Query: ${patientQuery}`;
             className={`flex items-center gap-2 py-2 px-4 rounded-xl transition-all cursor-pointer ${activeTab === 'ai_doctor' ? 'bg-gradient-to-r from-teal-500 to-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
           >
             <Bot className="h-4 w-4" />
-            AI Female Doctor (தமிழ் AI)
+            AI Female Doctor (தமிழ் AI Video)
           </button>
           <button
             onClick={() => setActiveTab('appointments')}
@@ -280,183 +336,344 @@ Patient Query: ${patientQuery}`;
         </div>
       </div>
 
-      {/* TAB 1: AI FEMALE DOCTOR CONSULTATION (தமிழ் / ENGLISH) */}
+      {/* TAB 1: AI FEMALE DOCTOR VIDEO CONSULTATION (தமிழ் / ENGLISH) */}
       {activeTab === 'ai_doctor' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          
-          {/* Left Column: AI Female Doctor Avatar Stream & Controls */}
-          <div className="lg:col-span-1 glass-panel p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 flex flex-col items-center justify-between text-center relative overflow-hidden bg-gradient-to-b from-teal-500/10 via-indigo-500/5 to-slate-900/40">
-            {/* Background Glow */}
-            <div className="absolute -top-12 -right-12 w-48 h-48 bg-teal-400/20 rounded-full blur-2xl pointer-events-none"></div>
-
-            <div className="w-full flex justify-between items-center z-10">
-              <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-1 rounded-full flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                AI Doctor Online
-              </span>
-              <button
-                onClick={() => setVoiceOutputEnabled(!voiceOutputEnabled)}
-                className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition-all ${voiceOutputEnabled ? 'bg-teal-500 text-white border-teal-400 shadow-md' : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800'}`}
-                title="Toggle Voice Output"
-              >
-                {voiceOutputEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-                {voiceOutputEnabled ? 'Voice ON' : 'Voice OFF'}
-              </button>
-            </div>
-
-            {/* Simulated Animated AI Female Doctor Avatar Screen */}
-            <div className="w-full aspect-square max-w-[280px] bg-slate-950 rounded-3xl relative overflow-hidden border-2 border-teal-500/40 shadow-2xl flex flex-col items-center justify-center group my-2">
+        <>
+          {inAiVideoCall ? (
+            /* FULL REAL-TIME AI FEMALE DOCTOR VIDEO CALL ROOM */
+            <div className="glass-panel p-6 rounded-3xl border border-teal-500/40 shadow-2xl space-y-6 bg-slate-950 text-white relative overflow-hidden">
               
-              {/* Doctor Avatar Image / Graphic */}
-              <div className="relative flex flex-col items-center">
-                {/* Audio Equalizer Rings */}
-                <div className={`absolute -inset-4 bg-gradient-to-r from-teal-400 via-cyan-500 to-indigo-500 rounded-full opacity-40 blur-md ${isSpeaking ? 'animate-ping' : ''}`}></div>
+              {/* Call Header */}
+              <div className="flex justify-between items-center pb-4 border-b border-slate-800">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-teal-500 text-white rounded-xl shadow-lg animate-pulse">
+                    <Video className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-lg flex items-center gap-2">
+                      Live AI Female Doctor Video Consultation
+                      <span className="text-[10px] font-black uppercase bg-teal-500/20 text-teal-300 px-2 py-0.5 rounded border border-teal-500/40">
+                        தமிழ் & English Audio
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">Consultation ID: AI-CON-9002 • Dr. Haya (AI Medical Specialist)</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-semibold bg-emerald-950 text-emerald-300 border border-emerald-800 py-1.5 px-3 rounded-full flex items-center gap-1.5">
+                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Live Video Avatar Stream Active
+                  </span>
+                </div>
+              </div>
+
+              {/* VIDEO CONSULTATION CANVAS GRID */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
                 
-                <div className="relative w-28 h-28 rounded-full bg-gradient-to-tr from-teal-400 via-indigo-500 to-purple-500 p-1 shadow-2xl">
-                  <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden">
-                    <User className="h-16 w-16 text-teal-300 animate-pulse" />
+                {/* Main View: AI Female Doctor Video Stream */}
+                <div className="lg:col-span-2 aspect-video bg-slate-900 rounded-3xl relative overflow-hidden border-2 border-teal-500/30 shadow-2xl flex flex-col items-center justify-center">
+                  
+                  {/* Doctor Video Graphics / Animated Avatar Stream */}
+                  <div className="absolute inset-0 bg-gradient-to-tr from-slate-950 via-slate-900 to-indigo-950/60 flex flex-col items-center justify-center p-6 text-center">
+                    
+                    {/* Animated Pulsing Wave Rings */}
+                    <div className={`absolute w-72 h-72 rounded-full bg-teal-500/20 blur-3xl transition-all duration-300 ${isSpeaking ? 'scale-125 opacity-100' : 'scale-90 opacity-40'}`}></div>
+
+                    {/* Avatar Profile Ring */}
+                    <div className="relative w-36 h-36 rounded-full bg-gradient-to-tr from-teal-400 via-indigo-500 to-purple-500 p-1.5 shadow-2xl my-2">
+                      <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center overflow-hidden relative">
+                        <User className="h-20 w-20 text-teal-300 animate-pulse" />
+                      </div>
+                    </div>
+
+                    {/* Speech Lip Sync Wave Bar */}
+                    {isSpeaking ? (
+                      <div className="flex items-center gap-1.5 my-3 bg-teal-950/80 px-4 py-2 rounded-full border border-teal-500/40">
+                        <span className="text-xs text-teal-300 font-bold uppercase tracking-wider mr-2">Dr. Haya Speaking:</span>
+                        <span className="h-5 w-1 bg-teal-400 rounded-full animate-bounce"></span>
+                        <span className="h-8 w-1 bg-cyan-400 rounded-full animate-bounce delay-100"></span>
+                        <span className="h-10 w-1 bg-teal-300 rounded-full animate-bounce delay-200"></span>
+                        <span className="h-6 w-1 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
+                        <span className="h-4 w-1 bg-teal-400 rounded-full animate-bounce"></span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 my-3 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        <HeartPulse className="h-4 w-4 text-emerald-400 animate-ekg-beat" />
+                        <span>Dr. Haya Video Stream Connected</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <span className="absolute top-4 left-4 bg-slate-900/80 backdrop-blur-md text-white text-xs font-bold px-3 py-1 rounded-xl border border-slate-800 flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-teal-400 animate-pulse"></span>
+                    Dr. Haya (AI Female Doctor Video)
+                  </span>
+
+                  {/* Subtitle Bar Overlay */}
+                  <div className="absolute bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur-md p-3.5 rounded-2xl border border-teal-500/30 text-xs sm:text-sm text-teal-200 font-semibold shadow-2xl flex items-start gap-2">
+                    <Bot className="h-5 w-5 text-teal-400 shrink-0 mt-0.5" />
+                    <div className="line-clamp-2">{liveSubtitle}</div>
                   </div>
                 </div>
 
-                {/* Lip-sync Speech Waves */}
-                {isSpeaking ? (
-                  <div className="flex items-center gap-1 mt-4">
-                    <span className="h-4 w-1 bg-teal-400 rounded-full animate-bounce"></span>
-                    <span className="h-6 w-1 bg-teal-300 rounded-full animate-bounce delay-100"></span>
-                    <span className="h-8 w-1 bg-cyan-400 rounded-full animate-bounce delay-200"></span>
-                    <span className="h-5 w-1 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
-                    <span className="h-3 w-1 bg-teal-400 rounded-full animate-bounce"></span>
+                {/* Patient Camera Self View Corner Box */}
+                <div className="lg:col-span-1 glass-panel p-4 rounded-3xl border border-slate-800 bg-slate-900/80 flex flex-col justify-between space-y-4">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                    <span className="text-xs font-extrabold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Camera className="h-4 w-4 text-teal-400" />
+                      Your Video Feed
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-bold">Patient Self Camera</span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 mt-4 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
-                    <HeartPulse className="h-4 w-4 text-emerald-500 animate-ekg-beat" />
-                    <span>Listening & Ready</span>
+
+                  {/* HTML5 Live Webcam Video Element */}
+                  <div className="w-full aspect-video bg-slate-950 rounded-2xl relative overflow-hidden border border-slate-800 flex items-center justify-center">
+                    {patientCameraActive ? (
+                      <video
+                        ref={patientVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover rounded-2xl transform -scale-x-100"
+                      />
+                    ) : (
+                      <div className="text-slate-500 text-xs font-semibold text-center p-4">
+                        Webcam Disabled or Permission Denied
+                      </div>
+                    )}
+                    <span className="absolute bottom-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded">You (Patient)</span>
                   </div>
-                )}
+
+                  {/* Quick Speech Microphone Action */}
+                  <div className="space-y-2 pt-2">
+                    <button
+                      onClick={startSpeechDictation}
+                      className={`w-full py-3 rounded-2xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-600 text-white'}`}
+                    >
+                      <Mic className="h-4 w-4" />
+                      {isListening ? 'Listening (பேசுங்கள்)...' : 'Speak to Dr. Haya in தமிழ்'}
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <div className="absolute bottom-3 left-3 right-3 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-slate-800 text-center">
-                <span className="font-extrabold text-xs text-white block">Dr. Haya (AI Medical Specialist)</span>
-                <span className="text-[10px] text-teal-400 font-semibold">Specialty: General Medicine & AI Diagnostics</span>
-              </div>
-            </div>
-
-            {/* Language Switcher Control */}
-            <div className="w-full flex items-center justify-center gap-2 pt-2">
-              <Languages className="h-4 w-4 text-slate-400" />
-              <button
-                onClick={() => setLanguageMode('ta-IN')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${languageMode === 'ta-IN' ? 'bg-teal-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
-              >
-                தமிழ் Mode
-              </button>
-              <button
-                onClick={() => setLanguageMode('en-US')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${languageMode === 'en-US' ? 'bg-teal-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
-              >
-                English Mode
-              </button>
-            </div>
-          </div>
-
-          {/* Right Column: Interactive Consultation Chat & Voice Dictation */}
-          <div className="lg:col-span-2 glass-panel p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl flex flex-col h-[600px] justify-between">
-            
-            {/* Messages Container */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-              {messages.map((msg, i) => (
-                <div 
-                  key={i} 
-                  className={`flex ${msg.sender === 'patient' ? 'justify-end' : 'justify-start'} items-start gap-2.5`}
-                >
-                  {msg.sender === 'ai_doctor' && (
-                    <div className="p-2 bg-gradient-to-tr from-teal-500 to-indigo-600 text-white rounded-xl shadow-md shrink-0">
-                      <Bot className="h-4 w-4" />
-                    </div>
-                  )}
-                  <div 
-                    className={`max-w-[85%] p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-sm ${
-                      msg.sender === 'patient' 
-                        ? 'bg-gradient-to-r from-teal-500 to-indigo-600 text-white rounded-tr-none font-semibold' 
-                        : 'bg-slate-100 dark:bg-slate-800/90 rounded-tl-none text-slate-800 dark:text-slate-200 border border-slate-200/50 dark:border-slate-750'
-                    }`}
-                  >
-                    <div className="whitespace-pre-line">{msg.text}</div>
-                    <div className="flex justify-between items-center mt-2 text-[10px] opacity-75">
-                      <span>{msg.sender === 'ai_doctor' ? 'Dr. Haya (AI Doctor)' : 'You (Patient)'}</span>
-                      <span>{msg.timestamp}</span>
-                    </div>
-                  </div>
-                  {msg.sender === 'patient' && (
-                    <div className="p-2 bg-indigo-600 text-white rounded-xl shrink-0 shadow-md">
-                      <User className="h-4 w-4" />
-                    </div>
-                  )}
-                </div>
-              ))}
-              {isTyping && (
-                <div className="flex justify-start items-center gap-2">
-                  <div className="p-2 bg-teal-500 text-white rounded-xl">
-                    <Bot className="h-4 w-4" />
-                  </div>
-                  <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl rounded-tl-none text-xs flex gap-1.5 items-center">
-                    <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce"></span>
-                    <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce delay-100"></span>
-                    <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce delay-200"></span>
-                    <span className="text-[11px] text-slate-400 font-semibold ml-1">Dr. Haya is thinking in தமிழ்...</span>
-                  </div>
-                </div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Quick Tamil Query Pills */}
-            <div className="my-3 flex gap-2 overflow-x-auto pb-1 shrink-0">
-              {[
-                { label: "🩺 காய்ச்சல் & தலைவலி", text: "எனக்கு 2 நாளா காய்ச்சல் மற்றும் தலைவலி இருக்கு" },
-                { label: "🥗 சர்க்கரை நோய் உணவு", text: "சர்க்கரை நோய்க்கு என்ன உணவு சாப்பிடலாம்?" },
-                { label: "🫀 இதய நலம் ஆலோசனை", text: "இதயத்தை ஆரோக்கியமாக வைத்துக்கொள்ள என்ன செய்ய வேண்டும்?" },
-                { label: "💊 மாத்திரை வழிகாட்டல்", text: "மருந்துகளை எப்போது சாப்பிட வேண்டும்?" },
-              ].map((pill, idx) => (
+              {/* VIDEO CALL CONTROL BAR */}
+              <div className="flex justify-center items-center gap-4 pt-4 border-t border-slate-800">
                 <button
-                  key={idx}
-                  onClick={() => setInputText(pill.text)}
-                  className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950/30 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-full border border-slate-200 dark:border-slate-700 hover:border-teal-400 transition-all shadow-sm shrink-0 cursor-pointer"
+                  onClick={() => setPatientMicActive(!patientMicActive)}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${patientMicActive ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700' : 'bg-rose-950 border-rose-800 text-rose-400'}`}
+                  title={patientMicActive ? "Mute Microphone" : "Unmute Microphone"}
                 >
-                  {pill.label}
+                  {patientMicActive ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
                 </button>
-              ))}
+                
+                <button
+                  onClick={() => setPatientCameraActive(!patientCameraActive)}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer ${patientCameraActive ? 'bg-slate-800 border-slate-700 text-white hover:bg-slate-700' : 'bg-rose-950 border-rose-800 text-rose-400'}`}
+                  title={patientCameraActive ? "Disable Camera" : "Enable Camera"}
+                >
+                  {patientCameraActive ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                </button>
+
+                <button
+                  onClick={handleEndAiVideoCall}
+                  className="px-6 py-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-xl transition-all flex items-center gap-2 cursor-pointer"
+                  title="End AI Video Call"
+                >
+                  <PhoneOff className="h-5 w-5" />
+                  End AI Consultation
+                </button>
+              </div>
             </div>
-
-            {/* Input Form & Speech Microphone */}
-            <form onSubmit={handleSendQuery} className="flex gap-2 shrink-0 pt-2 border-t border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={startSpeechDictation}
-                className={`p-3 rounded-xl shadow-md transition-all flex items-center justify-center shrink-0 cursor-pointer ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
-                title="Voice Type (தமிழ் / English Dictation)"
-              >
-                {isListening ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-              </button>
+          ) : (
+            /* STANDARD CHAT & VIDEO LAUNCH ROOM */
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
               
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={isListening ? "கேட்கிறது (Listening in தமிழ்)..." : "உங்கள் மருத்துவ கேள்வியை தமிழில் டைப் செய்யவும் (Type in Tamil or English)..."}
-                className="flex-1 p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none"
-              />
+              {/* Left Column: AI Female Doctor Avatar Stream & Controls */}
+              <div className="lg:col-span-1 glass-panel p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-4 flex flex-col items-center justify-between text-center relative overflow-hidden bg-gradient-to-b from-teal-500/10 via-indigo-500/5 to-slate-900/40">
+                {/* Background Glow */}
+                <div className="absolute -top-12 -right-12 w-48 h-48 bg-teal-400/20 rounded-full blur-2xl pointer-events-none"></div>
 
-              <button 
-                type="submit"
-                disabled={!inputText.trim()}
-                className="p-3 bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-600 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
-              >
-                <Send className="h-5 w-5" />
-              </button>
-            </form>
-          </div>
-        </div>
+                <div className="w-full flex justify-between items-center z-10">
+                  <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-2.5 py-1 rounded-full flex items-center gap-1 border border-emerald-200 dark:border-emerald-800">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    AI Doctor Online
+                  </span>
+                  <button
+                    onClick={() => setVoiceOutputEnabled(!voiceOutputEnabled)}
+                    className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 border transition-all ${voiceOutputEnabled ? 'bg-teal-500 text-white border-teal-400 shadow-md' : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800'}`}
+                    title="Toggle Voice Output"
+                  >
+                    {voiceOutputEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+                    {voiceOutputEnabled ? 'Voice ON' : 'Voice OFF'}
+                  </button>
+                </div>
+
+                {/* Simulated Animated AI Female Doctor Avatar Screen */}
+                <div className="w-full aspect-square max-w-[280px] bg-slate-950 rounded-3xl relative overflow-hidden border-2 border-teal-500/40 shadow-2xl flex flex-col items-center justify-center group my-2">
+                  
+                  {/* Doctor Avatar Image / Graphic */}
+                  <div className="relative flex flex-col items-center">
+                    {/* Audio Equalizer Rings */}
+                    <div className={`absolute -inset-4 bg-gradient-to-r from-teal-400 via-cyan-500 to-indigo-500 rounded-full opacity-40 blur-md ${isSpeaking ? 'animate-ping' : ''}`}></div>
+                    
+                    <div className="relative w-28 h-28 rounded-full bg-gradient-to-tr from-teal-400 via-indigo-500 to-purple-500 p-1 shadow-2xl">
+                      <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden">
+                        <User className="h-16 w-16 text-teal-300 animate-pulse" />
+                      </div>
+                    </div>
+
+                    {/* Lip-sync Speech Waves */}
+                    {isSpeaking ? (
+                      <div className="flex items-center gap-1 mt-4">
+                        <span className="h-4 w-1 bg-teal-400 rounded-full animate-bounce"></span>
+                        <span className="h-6 w-1 bg-teal-300 rounded-full animate-bounce delay-100"></span>
+                        <span className="h-8 w-1 bg-cyan-400 rounded-full animate-bounce delay-200"></span>
+                        <span className="h-5 w-1 bg-indigo-400 rounded-full animate-bounce delay-150"></span>
+                        <span className="h-3 w-1 bg-teal-400 rounded-full animate-bounce"></span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 mt-4 text-[10px] font-bold text-slate-400 tracking-widest uppercase">
+                        <HeartPulse className="h-4 w-4 text-emerald-500 animate-ekg-beat" />
+                        <span>Listening & Ready</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="absolute bottom-3 left-3 right-3 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-slate-800 text-center">
+                    <span className="font-extrabold text-xs text-white block">Dr. Haya (AI Medical Specialist)</span>
+                    <span className="text-[10px] text-teal-400 font-semibold">Specialty: General Medicine & AI Diagnostics</span>
+                  </div>
+                </div>
+
+                {/* Launch Live Video Call Button */}
+                <button
+                  onClick={handleStartAiVideoCall}
+                  className="w-full py-3 bg-gradient-to-r from-teal-500 via-emerald-600 to-indigo-600 hover:from-teal-600 text-white font-extrabold text-xs rounded-2xl shadow-xl flex items-center justify-center gap-2 transition-all cursor-pointer transform hover:scale-[1.02]"
+                >
+                  <Video className="h-4 w-4 animate-pulse" />
+                  Start Live Video Call with Dr. Haya (தமிழ்)
+                </button>
+
+                {/* Language Switcher Control */}
+                <div className="w-full flex items-center justify-center gap-2 pt-2">
+                  <Languages className="h-4 w-4 text-slate-400" />
+                  <button
+                    onClick={() => setLanguageMode('ta-IN')}
+                    className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${languageMode === 'ta-IN' ? 'bg-teal-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
+                  >
+                    தமிழ் Mode
+                  </button>
+                  <button
+                    onClick={() => setLanguageMode('en-US')}
+                    className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${languageMode === 'en-US' ? 'bg-teal-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}
+                  >
+                    English Mode
+                  </button>
+                </div>
+              </div>
+
+              {/* Right Column: Interactive Consultation Chat & Voice Dictation */}
+              <div className="lg:col-span-2 glass-panel p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl flex flex-col h-[600px] justify-between">
+                
+                {/* Messages Container */}
+                <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+                  {messages.map((msg, i) => (
+                    <div 
+                      key={i} 
+                      className={`flex ${msg.sender === 'patient' ? 'justify-end' : 'justify-start'} items-start gap-2.5`}
+                    >
+                      {msg.sender === 'ai_doctor' && (
+                        <div className="p-2 bg-gradient-to-tr from-teal-500 to-indigo-600 text-white rounded-xl shadow-md shrink-0">
+                          <Bot className="h-4 w-4" />
+                        </div>
+                      )}
+                      <div 
+                        className={`max-w-[85%] p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-sm ${
+                          msg.sender === 'patient' 
+                            ? 'bg-gradient-to-r from-teal-500 to-indigo-600 text-white rounded-tr-none font-semibold' 
+                            : 'bg-slate-100 dark:bg-slate-800/90 rounded-tl-none text-slate-800 dark:text-slate-200 border border-slate-200/50 dark:border-slate-750'
+                        }`}
+                      >
+                        <div className="whitespace-pre-line">{msg.text}</div>
+                        <div className="flex justify-between items-center mt-2 text-[10px] opacity-75">
+                          <span>{msg.sender === 'ai_doctor' ? 'Dr. Haya (AI Doctor)' : 'You (Patient)'}</span>
+                          <span>{msg.timestamp}</span>
+                        </div>
+                      </div>
+                      {msg.sender === 'patient' && (
+                        <div className="p-2 bg-indigo-600 text-white rounded-xl shrink-0 shadow-md">
+                          <User className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {isTyping && (
+                    <div className="flex justify-start items-center gap-2">
+                      <div className="p-2 bg-teal-500 text-white rounded-xl">
+                        <Bot className="h-4 w-4" />
+                      </div>
+                      <div className="bg-slate-100 dark:bg-slate-800 p-3 rounded-2xl rounded-tl-none text-xs flex gap-1.5 items-center">
+                        <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce"></span>
+                        <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce delay-100"></span>
+                        <span className="h-2 w-2 bg-teal-500 rounded-full animate-bounce delay-200"></span>
+                        <span className="text-[11px] text-slate-400 font-semibold ml-1">Dr. Haya is thinking in தமிழ்...</span>
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                {/* Quick Tamil Query Pills */}
+                <div className="my-3 flex gap-2 overflow-x-auto pb-1 shrink-0">
+                  {[
+                    { label: "🩺 காய்ச்சல் & தலைவலி", text: "எனக்கு 2 நாளா காய்ச்சல் மற்றும் தலைவலி இருக்கு" },
+                    { label: "🥗 சர்க்கரை நோய் உணவு", text: "சர்க்கரை நோய்க்கு என்ன உணவு சாப்பிடலாம்?" },
+                    { label: "🫀 இதய நலம் ஆலோசனை", text: "இதயத்தை ஆரோக்கியமாக வைத்துக்கொள்ள என்ன செய்ய வேண்டும்?" },
+                    { label: "💊 மாத்திரை வழிகாட்டல்", text: "மருந்துகளை எப்போது சாப்பிட வேண்டும்?" },
+                  ].map((pill, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setInputText(pill.text)}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950/30 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-full border border-slate-200 dark:border-slate-700 hover:border-teal-400 transition-all shadow-sm shrink-0 cursor-pointer"
+                    >
+                      {pill.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input Form & Speech Microphone */}
+                <form onSubmit={handleSendQuery} className="flex gap-2 shrink-0 pt-2 border-t border-slate-200 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={startSpeechDictation}
+                    className={`p-3 rounded-xl shadow-md transition-all flex items-center justify-center shrink-0 cursor-pointer ${isListening ? 'bg-rose-500 text-white animate-pulse' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                    title="Voice Type (தமிழ் / English Dictation)"
+                  >
+                    {isListening ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                  </button>
+                  
+                  <input
+                    type="text"
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    placeholder={isListening ? "கேட்கிறது (Listening in தமிழ்)..." : "உங்கள் மருத்துவ கேள்வியை தமிழில் டைப் செய்யவும் (Type in Tamil or English)..."}
+                    className="flex-1 p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-xs sm:text-sm font-semibold focus:ring-2 focus:ring-teal-500 focus:outline-none"
+                  />
+
+                  <button 
+                    type="submit"
+                    disabled={!inputText.trim()}
+                    className="p-3 bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-600 hover:to-indigo-700 text-white rounded-xl shadow-md transition-all flex items-center justify-center cursor-pointer disabled:opacity-50"
+                  >
+                    <Send className="h-5 w-5" />
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* TAB 2: HUMAN DOCTOR CONSULTATIONS */}
