@@ -10,16 +10,26 @@ import {
   Eye,
   Calendar,
   Printer,
-  Users
+  Users,
+  Sparkles,
+  Loader2,
+  Bot,
+  X
 } from 'lucide-react';
 import { downloadCSV, downloadExcel, downloadPDFFromElement } from '../utils/exportUtils';
 import DoctorSignature from '../components/DoctorSignature';
+import { generateAIClinicalReport } from '../utils/aiReportGenerator';
 
 export default function Reports() {
   const { patients } = useSystem();
   const [searchQuery, setSearchQuery] = useState('');
   const [reportType, setReportType] = useState('all');
   const [selectedReport, setSelectedReport] = useState(null);
+  
+  // AI Report Generation State
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiReportContent, setAiReportContent] = useState(null);
+  const [showAiModal, setShowAiModal] = useState(false);
 
   // Dynamically compile reports from SystemContext live patients array
   const allReports = patients.flatMap((p) => {
@@ -38,7 +48,8 @@ export default function Reports() {
         risk: `${pred.status} (${pred.risk})`,
         status: "Completed",
         accuracy: "98.4%",
-        notes: p.notes
+        notes: p.notes,
+        rawPatient: p
       }));
     } else {
       return [{
@@ -55,7 +66,8 @@ export default function Reports() {
         risk: "Low / Baseline",
         status: "Registered",
         accuracy: "98.4%",
-        notes: p.notes || "No notes recorded yet."
+        notes: p.notes || "No notes recorded yet.",
+        rawPatient: p
       }];
     }
   });
@@ -67,6 +79,24 @@ export default function Reports() {
   });
 
   const activeReport = selectedReport || filteredReports[0] || allReports[0] || null;
+
+  const handleGenerateAIReport = async (reportObj) => {
+    const target = reportObj || activeReport;
+    if (!target) return;
+
+    setSelectedReport(target);
+    setIsGeneratingAI(true);
+    setShowAiModal(true);
+
+    try {
+      const aiSynthesisText = await generateAIClinicalReport(target.rawPatient, target);
+      setAiReportContent(aiSynthesisText);
+    } catch (err) {
+      console.error("Error generating AI report:", err);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
 
   const handleDownload = (format, reportTarget) => {
     const reportObj = typeof reportTarget === 'object' ? reportTarget : (allReports.find(r => r.id === reportTarget) || activeReport);
@@ -99,10 +129,19 @@ export default function Reports() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div>
           <h1 className="font-display font-extrabold text-3xl">Clinical Report Center</h1>
-          <p className="text-sm text-slate-500 mt-1">Real-time dynamic patient diagnostic reports synced with registry</p>
+          <p className="text-sm text-slate-500 mt-1">Real-time dynamic patient diagnostic reports integrated with Medical AI</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold px-3 py-1 bg-medical-light text-medical-primary rounded-full border border-medical-primary/20 flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => handleGenerateAIReport(activeReport)}
+            disabled={isGeneratingAI || !activeReport}
+            className="px-4 py-2 bg-gradient-to-r from-medical-primary via-teal-600 to-indigo-600 hover:from-medical-secondary text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Sparkles className="h-4 w-4 animate-pulse text-amber-300" />
+            Generate AI Clinical Report
+          </button>
+
+          <span className="text-xs font-bold px-3 py-2 bg-medical-light text-medical-primary rounded-xl border border-medical-primary/20 flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" />
             {patients.length} Live Patients Synced
           </span>
@@ -176,6 +215,13 @@ export default function Reports() {
                       </td>
                       <td className="p-3 flex items-center justify-center gap-2">
                         <button 
+                          onClick={() => handleGenerateAIReport(rep)}
+                          className="p-1.5 hover:bg-teal-50 dark:hover:bg-slate-700 text-teal-600 dark:text-teal-400 rounded-lg cursor-pointer transition-colors"
+                          title="Synthesize AI Report"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                        </button>
+                        <button 
                           onClick={() => setSelectedReport(rep)}
                           className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-600 dark:text-slate-300 cursor-pointer transition-colors"
                           title="Quick View"
@@ -247,9 +293,20 @@ export default function Reports() {
                 </div>
               </div>
 
+              {/* AI Report Trigger */}
+              <div className="pt-2">
+                <button
+                  onClick={() => handleGenerateAIReport(activeReport)}
+                  className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-indigo-600 hover:from-teal-600 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Sparkles className="h-4 w-4 animate-spin" />
+                  Synthesize AI Report for {activeReport.patient}
+                </button>
+              </div>
+
               {/* Exports Buttons */}
               <div className="space-y-2 pt-4 border-t border-slate-200 dark:border-slate-800">
-                <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Export Document</h4>
+                <h4 className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Export Official Document</h4>
                 <div className="grid grid-cols-3 gap-2">
                   <button 
                     onClick={() => handleDownload('pdf', activeReport.id)}
@@ -284,6 +341,87 @@ export default function Reports() {
         </div>
       </div>
 
+      {/* AI Integrated Report Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="glass-panel bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-gradient-to-r from-teal-500/10 via-indigo-500/10 to-transparent">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gradient-to-tr from-teal-500 to-indigo-600 text-white rounded-xl shadow-md">
+                  <Bot className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="font-display font-extrabold text-xl flex items-center gap-2">
+                    AI Clinical Diagnostic Synthesis
+                    <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-700 dark:bg-teal-950 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+                      Groq & Gemini Hybrid
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">Generated for: <strong className="text-slate-800 dark:text-slate-200">{activeReport?.patient}</strong> ({activeReport?.patientId})</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAiModal(false)}
+                className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 flex-1 space-y-4">
+              {isGeneratingAI ? (
+                <div className="py-16 text-center space-y-4">
+                  <Loader2 className="h-12 w-12 text-teal-500 animate-spin mx-auto" />
+                  <div>
+                    <h4 className="font-bold text-base text-slate-700 dark:text-slate-200">AI Neural Engine Synthesizing Patient Data...</h4>
+                    <p className="text-xs text-slate-400 mt-1">Analyzing vital metrics, biomarker thresholds, and diagnostic risk profile.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Markdown Content Box */}
+                  <div className="p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 text-xs sm:text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-line font-sans">
+                    {aiReportContent}
+                  </div>
+
+                  {/* Doctor Signature Block */}
+                  <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
+                    <DoctorSignature doctorName="Dr. Hariprasath L" title="Founder & Chief AI Officer" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {!isGeneratingAI && (
+              <div className="p-6 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex flex-wrap justify-between items-center gap-3">
+                <span className="text-xs text-slate-400 italic">
+                  Autonomous Decision Support • Haya Health Care AI
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownload('pdf', activeReport.id)}
+                    className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download AI PDF Report
+                  </button>
+                  <button
+                    onClick={() => setShowAiModal(false)}
+                    className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Offscreen Single-Page PDF Template */}
       {activeReport && (
         <div style={{ position: 'fixed', left: '-9999px', top: '0', zIndex: -9999 }}>
@@ -316,6 +454,13 @@ export default function Reports() {
             </p>
             <p style={{ margin: '6px 0', fontSize: '13px', color: '#475569' }}><strong>Neural Model Accuracy:</strong> {activeReport.accuracy}</p>
           </div>
+
+          {aiReportContent && (
+            <div style={{ marginBottom: '20px', padding: '14px', backgroundColor: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '8px' }}>
+              <h3 style={{ fontSize: '12px', margin: '0 0 6px 0', color: '#7e22ce', fontWeight: '800', textTransform: 'uppercase' }}>AI Neural Clinical Synthesis</h3>
+              <p style={{ margin: 0, fontSize: '11px', color: '#581c87', lineHeight: '1.4', whiteSpace: 'pre-line' }}>{aiReportContent.slice(0, 450)}...</p>
+            </div>
+          )}
 
           <div style={{ marginTop: '24px' }}>
             <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#64748b', lineHeight: '1.4' }}>
